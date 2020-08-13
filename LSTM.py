@@ -15,17 +15,26 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error
 import math
 from sklearn.externals import joblib
+import warnings
+warnings.filterwarnings("ignore") 
 
-data = pd.read_excel('C:\\Users\\Administrator\\Desktop\\多变量时间序列\\多变量时间序列.xlsx')
-timesteps = 20
-df = np.array(data.iloc[0:1000])
+data_num_start = 3400 #从第data_num_start行数据开始训练
+data_num_end = 4855 #训练结束行数
+data_num = data_num_end - data_num_start #读取训练样本数
+val_num = 24 #输入的预测样本个数 实际上预测的是最后val_num-timesteps个 val_num应大于等于timesteps
+epoch_num = 300
+timesteps = 10
+neuron_num = 50
+data = pd.read_excel('C:\\Users\\Administrator\\Desktop\\多变量时间序列\\滑动窗口筛选.xlsx')
+df = np.array(data.iloc[data_num_start: data_num_end])
 x, y =[], []
-for i in range(len(df)):
+for i in range(len(df) - timesteps):
     end_index = i + timesteps
     if end_index > len(df):
         break
     else:
-        seq_x, seq_y = df[i:end_index, :-1], df[end_index - 1, -1]
+        seq_x = df[i:end_index, :] #读了所有列，包括目标预测列
+        seq_y = df[end_index, -1]
         x.append(seq_x)
         y.append(seq_y)
         
@@ -33,36 +42,40 @@ n_features = np.array(x).shape[2]
 x = np.array(x)
 y = np.array(y)
 model = Sequential()
-model.add(LSTM(50, activation='relu', input_shape = (timesteps, n_features)))
+model.add(LSTM(neuron_num, activation='relu', input_shape = (timesteps, n_features)))
 model.add(Dense(1))
 model.compile(optimizer ='adam', loss = 'mse')
-model.fit(x, y, epochs = 400, verbose = 0)
+model.fit(x, y, epochs = epoch_num, verbose = 0)
 #joblib.dump(model, 'C:\\Users\\Administrator\\Desktop\\多变量时间序列\\LSTM')
 
 
-xy_input = np.array(data.iloc[1000:1200])
+val_start = data_num_end - timesteps 
+val_end = data_num_end + val_num - timesteps 
+xy_input = np.array(data.iloc[val_start: val_end])
 x_val, y_val =[], []
-for i in range(len(xy_input)):
+for i in range(len(xy_input)-timesteps):
     end_index = i + timesteps
     if end_index > len(xy_input):
         break
     else:
-        seq_x, seq_y = xy_input[i:end_index, :-1], xy_input[end_index - 1, -1]
+        seq_x = xy_input[i:end_index, :]
+        seq_y = xy_input[end_index, -1]
         x_val.append(seq_x)
         y_val.append(seq_y)
         
-n_features = np.array(x).shape[2]
+n_features = np.array(x_val).shape[2]
 x_val = np.array(x_val)
 y_val = np.array(y_val)
 
-#x_input = x_input.reshape((1231, timesteps, n_features))  # 转换成样本量+步长+特征的格式
-y_pre= model.predict(x_val)
+
+x_input = x_val.reshape((len(x_val), timesteps, n_features))  # 转换成样本量+步长+特征的格式
+y_pre= model.predict(x_input)
 testScore = math.sqrt(mean_squared_error(y_val, y_pre))
 print('Test Score: %.2f RMSE' % (testScore))
 
 
 yval = np.concatenate((y, y_val), axis = 0)
-y_pre = y_pre.reshape((1, 181))
+y_pre = y_pre.reshape((1, len(y_pre)))
 ypre = np.concatenate((y, y_pre[0]), axis = 0)
 
 ypre_trend = np.array([])
@@ -99,8 +112,22 @@ for i in range(len(yval_trend)):
         else:
             diff_ = np.append(diff_, 0)
 diff_sum = np.sum(diff_)
-print("趋势判断正确率:", diff_sum, '\n')
+print(f'训练数据区间{(data_num_start, data_num_end)}', '\n',
+      f'模型参数(epoch, timesteps, neuron)={epoch_num, timesteps, neuron_num}', '\n', 
+      '趋势判断错误率:', diff_sum, '\n',
+      '预测时间点个数:', val_num-timesteps, '\n')
 
+j = 0
+k = []
+error_index_interval = data_num - timesteps - 2
+for i in range(len(diff_)):
+    if diff_[i] != 0:
+       j += 1
+       k.append(i - error_index_interval)
+print('预测趋势错误的时间点个数:', j, '\n',
+      '预测错误的位置:', k)
+     
+    
 dt1 = {'x':[], 'y':[]}
 for x in range(len(yval)):
     dt1['x'].append(x)
@@ -113,9 +140,10 @@ for x in range(len(ypre)):
     dt2['y'].append(ypre[x])
 plot_dt2 = pd.DataFrame(dt2, columns = ['x', 'y'])
 
+plot_num = data_num - timesteps 
 plt.figure(figsize=(20,6))
-l1 ,= plt.plot(plot_dt1.x[:992],plot_dt1.y[:992], linewidth = 3)
-l2 ,= plt.plot(plot_dt1.x[991:], plot_dt1.y[991:], linewidth = 2)    
-l3 ,= plt.plot(plot_dt2.x[991:], plot_dt2.y[991:], linewidth = 2) 
-plt.legend([l1,l2,l3],('raw-data','true-values','pre-values'),loc='best')
+l1 ,= plt.plot(plot_dt1.x[:plot_num], plot_dt1.y[:plot_num], linewidth = 3)
+l2 ,= plt.plot(plot_dt1.x[plot_num - 1:], plot_dt1.y[plot_num - 1:], linewidth = 2)    
+l3 ,= plt.plot(plot_dt2.x[plot_num - 1:], plot_dt2.y[plot_num - 1:], linewidth = 2) 
+plt.legend([l1,l2,l3],('raw-data','true-values','pre-values'), loc='best')
 plt.show()
