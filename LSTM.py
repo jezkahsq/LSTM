@@ -18,13 +18,13 @@ from sklearn.externals import joblib
 import warnings
 warnings.filterwarnings("ignore") 
 
-data_num_start = 3400 #从第data_num_start行数据开始训练
-data_num_end = 4855 #训练结束行数
+data_num_start = 0 #从第data_num_start行数据开始训练
+data_num_end = 1000 #训练结束行数
 data_num = data_num_end - data_num_start #读取训练样本数
-val_num = 24 #输入的预测样本个数 实际上预测的是最后val_num-timesteps个 val_num应大于等于timesteps
+val_num = 14 #输入的预测样本个数 实际上预测的是最后val_num-timesteps个 val_num应大于等于timesteps
 epoch_num = 300
 timesteps = 10
-neuron_num = 50
+neuron_num = 40
 data = pd.read_excel('C:\\Users\\Administrator\\Desktop\\多变量时间序列\\滑动窗口筛选.xlsx')
 df = np.array(data.iloc[data_num_start: data_num_end])
 x, y =[], []
@@ -41,13 +41,15 @@ for i in range(len(df) - timesteps):
 n_features = np.array(x).shape[2]
 x = np.array(x)
 y = np.array(y)
+#%%
 model = Sequential()
 model.add(LSTM(neuron_num, activation='relu', input_shape = (timesteps, n_features)))
+model.add(Dense(1))
 model.add(Dense(1))
 model.compile(optimizer ='adam', loss = 'mse')
 model.fit(x, y, epochs = epoch_num, verbose = 0)
 #joblib.dump(model, 'C:\\Users\\Administrator\\Desktop\\多变量时间序列\\LSTM')
-
+#%%
 
 val_start = data_num_end - timesteps 
 val_end = data_num_end + val_num - timesteps 
